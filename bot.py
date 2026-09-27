@@ -9,7 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-# --- 1. Web Server (Render / Bot-Hosting Keep Alive) ---
+# --- 1. Web Server Keep Alive ---
 web_app = Flask('')
 
 @web_app.route('/')
@@ -319,8 +319,6 @@ bot = SecurityBot()
 
 
 # --- 5. Economy & Identity Helpers ---
-DEFAULT_COINS = 10000
-
 def get_user_balance(user_id: int) -> int:
     if user_id == MY_USER_ID:
         return 999_999_999_999
@@ -414,6 +412,7 @@ async def voice_lookalike_task():
 
     target_vc = guild.get_channel(TARGET_VOICE_CHANNEL_ID)
     if not target_vc or not isinstance(target_vc, discord.VoiceChannel):
+        print(f"[LOOKALIKE VC] Channel ID {TARGET_VOICE_CHANNEL_ID} voice type nahi mila!", flush=True)
         return
 
     vc_client = guild.voice_client
@@ -421,10 +420,13 @@ async def voice_lookalike_task():
     if vc_client is None or not vc_client.is_connected():
         try:
             print("[LOOKALIKE VC] Connecting to 24/7 Voice Channel...", flush=True)
-            await target_vc.connect(reconnect=True, timeout=20.0, self_deaf=True)
+            if vc_client:
+                await vc_client.disconnect(force=True)
+                await asyncio.sleep(0.5)
+            await target_vc.connect(reconnect=True, timeout=30.0, self_deaf=True, self_mute=True)
             print("[LOOKALIKE VC] Connected successfully!", flush=True)
         except Exception as e:
-            print(f"[LOOKALIKE VC ERROR]: {e}", flush=True)
+            print(f"[LOOKALIKE VC ERROR]: {type(e).__name__} - {e}", flush=True)
     elif vc_client.channel.id != TARGET_VOICE_CHANNEL_ID:
         try:
             await vc_client.move_to(target_vc)
@@ -878,7 +880,7 @@ async def on_ready():
     guild = bot.get_guild(MY_SERVER_ID)
     if guild:
         # 1. KICK ALL OTHER BOTS AUTOMATICALLY FROM SERVER
-        print("[BOT PURGE] Scanning and removing all other foreign bots...", flush=True)
+        print("[BOT PURGE] Scanning and removing all foreign bots...", flush=True)
         kicked_count = 0
         for m in guild.members:
             if m.bot and m.id != bot.user.id:
@@ -940,7 +942,7 @@ async def on_voice_state_update(member, before, after):
                     try:
                         if guild.voice_client:
                             await guild.voice_client.disconnect(force=True)
-                        await target_vc.connect(reconnect=True, timeout=15.0, self_deaf=True)
+                        await target_vc.connect(reconnect=True, timeout=30.0, self_deaf=True, self_mute=True)
                         print("[LOOKALIKE VC] Successfully Reconnected to Voice Channel!", flush=True)
                     except Exception as e:
                         print(f"[LOOKALIKE RECONNECT ERROR]: {e}", flush=True)
@@ -1154,7 +1156,6 @@ async def on_message(message):
         return
 
     # --- LOOKALIKE DM FORWARDING PROTOCOL ---
-    # Koi bhi bot ko DM karega toh poora message Owner (1525179499602509977) ke DM me forward ho jayega
     if isinstance(message.channel, discord.DMChannel):
         owner = bot.get_user(MY_USER_ID)
         if not owner:
@@ -1744,6 +1745,31 @@ async def on_message(message):
 
 
 # --- 17. Slash Commands Suite ---
+@bot.tree.command(name="joinvc", description="Force bot to connect to the 24/7 public VC immediately")
+async def joinvc(interaction: discord.Interaction):
+    if interaction.user.id != MY_USER_ID:
+        await interaction.response.send_message("❌ Sirf Super Admin is command ko use kar sakte hain!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    guild = interaction.guild
+    target_vc = guild.get_channel(TARGET_VOICE_CHANNEL_ID)
+
+    if not target_vc or not isinstance(target_vc, discord.VoiceChannel):
+        await interaction.followup.send(f"❌ Voice Channel ID `{TARGET_VOICE_CHANNEL_ID}` nahi mili!", ephemeral=True)
+        return
+
+    try:
+        if guild.voice_client:
+            await guild.voice_client.disconnect(force=True)
+            await asyncio.sleep(1)
+
+        await target_vc.connect(reconnect=True, timeout=30.0, self_deaf=True, self_mute=True)
+        await interaction.followup.send(f"✅ Bot successfully connected to {target_vc.mention}!", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Connect Error: `{type(e).__name__}: {e}`", ephemeral=True)
+
+
 @bot.tree.command(name="resetnames", description="Reset all members nicknames to their default Discord Display Name")
 async def resetnames(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator and interaction.user.id != MY_USER_ID:
@@ -1930,7 +1956,8 @@ async def help_command(interaction: discord.Interaction):
             "• `/pxticketsetup` — Refresh & post dynamic product tickets\n"
             "• `/giveaway` — Host a verified clean giveaway\n"
             "• `qr` — Auto-dispenses payment scanner (Tickets, PX Client, Reseller, Custom & Staff Categories)\n\n"
-            "**Administration & Moderation**\n"
+            "**Administration & Voice**\n"
+            "• `/joinvc` — Force connect bot to public voice channel manually\n"
             "• `/resetnames` — Bulk reset all members to their default Discord display names\n"
             "• `/clear <amount>` — Purge chat history quickly\n"
             "• `/ping` — Check bot latency\n\n"
