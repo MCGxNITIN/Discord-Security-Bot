@@ -9,12 +9,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-# --- 1. Web Server (Render 24/7 Keep Alive) ---
+# --- 1. Web Server (Render / Bot-Hosting Keep Alive) ---
 web_app = Flask('')
 
 @web_app.route('/')
 def home():
-    return "PERSISTX Master Bot + Full OwO RPG System Online 24/7!"
+    return "PERSISTX Master Bot + Full Voice Clone System Online 24/7!"
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
@@ -32,14 +32,14 @@ intents.message_content = True
 intents.guilds = True
 intents.invites = True
 intents.reactions = True
+intents.voice_states = True
 
 MY_SERVER_ID = 1525181999147388958
-MY_USER_ID = 1525179499602509977  # Sole Authorized Closer & Unlimited Wealth
+MY_USER_ID = 1525179499602509977  # Sole Super Admin & Lookalike Owner
+TARGET_VOICE_CHANNEL_ID = 1536673850358636614  # 24/7 Public VC
 
-# Hardcoded Whitelisted Bots (Updated with New App ID)
-WHITELISTED_BOT_IDS = [
-    1550219202068090937
-]
+# Whitelist Cleared (Only THIS bot will stay, all others kicked/banned)
+WHITELISTED_BOT_IDS = []
 
 AUTO_ROLE_IDS = [
     1525217661691236483,  # Family Role
@@ -70,11 +70,13 @@ ANDROID_CATEGORY_ID = 1525182001097998345
 PX_CLIENT_CHANNEL_ID = 1549535112620679251
 RESELLER_CATEGORY_ID = 1549737126109773824
 CUSTOM_PANEL_CATEGORY_ID = 1549737170691166289
+STAFF_CATEGORY_ID = 1551076037092319362
 
 QR_ALLOWED_CATEGORY_IDS = [
     TICKET_CATEGORY_ID,
     RESELLER_CATEGORY_ID,
-    CUSTOM_PANEL_CATEGORY_ID
+    CUSTOM_PANEL_CATEGORY_ID,
+    STAFF_CATEGORY_ID
 ]
 
 QR_IMAGE_URL = "https://cdn.discordapp.com/attachments/1525182000825237654/1547499435225911346/image.png?ex=6aa99368&is=6aa841e8&hm=ff5c6c833995f75802abfc9c57bd1226ebb87766937e78c32de84810844530d4&"
@@ -403,7 +405,34 @@ async def execute_antinuke_punishment(guild: discord.Guild, executor: discord.Me
         pass
 
 
-# --- 7. Reaction Restrictor for Giveaways ---
+# --- 7. Lookalike 24/7 VC Keeper & Auto-Reconnect Task ---
+@tasks.loop(seconds=15)
+async def voice_lookalike_task():
+    guild = bot.get_guild(MY_SERVER_ID)
+    if not guild:
+        return
+
+    target_vc = guild.get_channel(TARGET_VOICE_CHANNEL_ID)
+    if not target_vc or not isinstance(target_vc, discord.VoiceChannel):
+        return
+
+    vc_client = guild.voice_client
+
+    if vc_client is None or not vc_client.is_connected():
+        try:
+            print("[LOOKALIKE VC] Connecting to 24/7 Voice Channel...", flush=True)
+            await target_vc.connect(reconnect=True, timeout=20.0, self_deaf=True)
+            print("[LOOKALIKE VC] Connected successfully!", flush=True)
+        except Exception as e:
+            print(f"[LOOKALIKE VC ERROR]: {e}", flush=True)
+    elif vc_client.channel.id != TARGET_VOICE_CHANNEL_ID:
+        try:
+            await vc_client.move_to(target_vc)
+        except Exception:
+            pass
+
+
+# --- 8. Reaction Restrictor for Giveaways ---
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     if payload.user_id == bot.user.id:
@@ -420,7 +449,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
                 pass
 
 
-# --- 8. Dynamic Ticket Generator & Select View ---
+# --- 9. Dynamic Ticket Generator & Select View ---
 def generate_ticket_options(guild: discord.Guild):
     pc_options = []
     android_options = []
@@ -641,7 +670,7 @@ async def force_fresh_ticket_panel(guild: discord.Guild):
         print(f"[PANEL POST ERROR]: {e}", flush=True)
 
 
-# --- 9. Inactivity Cleaner Task (ONLY FOR TICKET_CATEGORY_ID) ---
+# --- 10. Inactivity Cleaner Task (ONLY FOR TICKET_CATEGORY_ID) ---
 @tasks.loop(minutes=30)
 async def ghost_tickets_cleaner():
     guild = bot.get_guild(MY_SERVER_ID)
@@ -655,11 +684,11 @@ async def ghost_tickets_cleaner():
     now = datetime.utcnow()
 
     for channel in category.text_channels:
-        if channel.category_id in [RESELLER_CATEGORY_ID, CUSTOM_PANEL_CATEGORY_ID] or channel.id == PX_CLIENT_CHANNEL_ID:
+        if channel.category_id in [RESELLER_CATEGORY_ID, CUSTOM_PANEL_CATEGORY_ID, STAFF_CATEGORY_ID] or channel.id == PX_CLIENT_CHANNEL_ID:
             continue
             
         c_name = channel.category.name.lower() if channel.category else ""
-        if "reseller" in c_name or "custom" in c_name or "client" in c_name:
+        if "reseller" in c_name or "custom" in c_name or "client" in c_name or "staff" in c_name:
             continue
 
         try:
@@ -709,7 +738,7 @@ async def ghost_tickets_cleaner():
             print(f"[GHOST CLEANER ERROR in #{channel.name}]: {e}")
 
 
-# --- 10. Mines Mini-Game View ---
+# --- 11. Mines Mini-Game View ---
 class MinesGameView(discord.ui.View):
     def __init__(self, user: discord.User, bet: int):
         super().__init__(timeout=90)
@@ -829,7 +858,7 @@ class MinesGameView(discord.ui.View):
         self.stop()
 
 
-# --- 11. Security Checks & Ready Listener ---
+# --- 12. Security Checks & Ready Listener (Kick Bots & 24/7 Lookalike VC) ---
 @bot.tree.interaction_check
 async def global_slash_check(interaction: discord.Interaction):
     if not interaction.guild or interaction.guild.id != MY_SERVER_ID:
@@ -842,14 +871,37 @@ async def on_ready():
     print(f"\n==========================================", flush=True)
     print(f"[ONLINE] Logged in as: {bot.user.name} ({bot.user.id})", flush=True)
     print(f"[SECURE] Authorized ONLY for Guild ID: {MY_SERVER_ID}", flush=True)
-    print(f"[WHITELIST] Allowed Bots: {WHITELISTED_BOT_IDS}", flush=True)
-    print(f"[ECONOMY] Default Balance: {DEFAULT_COINS:,} | Daily: 777 | Admin: Unlimited (∞)", flush=True)
-    print(f"[TICKET ACCESS] Only Admin ID ({MY_USER_ID}) can close tickets!", flush=True)
-    print(f"[CLEANER LIMIT] Auto-Inactivity Warning/Close locked ONLY to Category: {TICKET_CATEGORY_ID}", flush=True)
+    print(f"[LOOKALIKE] 24/7 VC Channel: {TARGET_VOICE_CHANNEL_ID}", flush=True)
+    print(f"[LOOKALIKE] DM Forwarding to Owner ID: {MY_USER_ID}", flush=True)
     print(f"==========================================\n", flush=True)
 
     guild = bot.get_guild(MY_SERVER_ID)
     if guild:
+        # 1. KICK ALL OTHER BOTS AUTOMATICALLY FROM SERVER
+        print("[BOT PURGE] Scanning and removing all other foreign bots...", flush=True)
+        kicked_count = 0
+        for m in guild.members:
+            if m.bot and m.id != bot.user.id:
+                try:
+                    await m.kick(reason="Server Clean: Only Sole Official Bot Allowed")
+                    kicked_count += 1
+                    print(f"[BOT PURGE] Kicked foreign bot: {m.name} ({m.id})", flush=True)
+                    await asyncio.sleep(0.5)
+                except Exception as e:
+                    print(f"[BOT PURGE ERROR] Could not kick {m.name}: {e}", flush=True)
+        print(f"[BOT PURGE COMPLETE] Total kicked: {kicked_count} bots.", flush=True)
+
+        # 2. Set Lookalike Server Nickname
+        try:
+            await guild.me.edit(nick="PERSIST-X")
+        except Exception:
+            pass
+
+        # 3. Start 24/7 Voice Task
+        if not voice_lookalike_task.is_running():
+            voice_lookalike_task.start()
+
+        # 4. Sync Slash Commands
         try:
             guild_target = discord.Object(id=MY_SERVER_ID)
             bot.tree.copy_global_to(guild=guild_target)
@@ -874,7 +926,27 @@ async def on_ready():
             await g.leave()
 
 
-# --- 12. Channels & Role Watchdog ---
+# --- 13. Voice State Watchdog (Instant VC Reconnect) ---
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if member.id == bot.user.id:
+        if after.channel is None or after.channel.id != TARGET_VOICE_CHANNEL_ID:
+            print("[LOOKALIKE VC] Disconnected or Moved! Auto-reconnecting in 3 seconds...", flush=True)
+            await asyncio.sleep(3)
+            guild = bot.get_guild(MY_SERVER_ID)
+            if guild:
+                target_vc = guild.get_channel(TARGET_VOICE_CHANNEL_ID)
+                if target_vc and isinstance(target_vc, discord.VoiceChannel):
+                    try:
+                        if guild.voice_client:
+                            await guild.voice_client.disconnect(force=True)
+                        await target_vc.connect(reconnect=True, timeout=15.0, self_deaf=True)
+                        print("[LOOKALIKE VC] Successfully Reconnected to Voice Channel!", flush=True)
+                    except Exception as e:
+                        print(f"[LOOKALIKE RECONNECT ERROR]: {e}", flush=True)
+
+
+# --- 14. Channels & Role Watchdog ---
 @bot.event
 async def on_guild_channel_create(channel):
     if channel.guild.id != MY_SERVER_ID:
@@ -896,7 +968,7 @@ async def on_guild_channel_delete(channel):
     async for entry in guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_delete):
         executor = entry.user
         if (hasattr(channel, 'category') and channel.category and 
-            ("ticket" in channel.category.name.lower() or "client" in channel.category.name.lower())):
+            ("ticket" in channel.category.name.lower() or "client" in channel.category.name.lower() or "staff" in channel.category.name.lower())):
             return
         await execute_antinuke_punishment(guild, executor, f"Channel Deletion: #{channel.name}")
 
@@ -917,19 +989,15 @@ async def on_guild_role_delete(role):
         await execute_antinuke_punishment(guild, executor, f"Role Deletion: @{role.name}")
 
 
-# --- 13. Member Events (Anti-Nuke with Whitelist Check) ---
+# --- 15. Member Events (Anti-Bot Strict Ban) ---
 @bot.event
 async def on_member_join(member):
     if member.guild.id != MY_SERVER_ID:
         return
     guild = member.guild
 
-    # 1. Zero-Tolerance Anti-Bot (Except Whitelisted Bots)
+    # Zero-Tolerance Anti-Bot
     if member.bot:
-        if member.id in WHITELISTED_BOT_IDS:
-            print(f"[WHITELIST] Authorized Bot Joined: {member.name} ({member.id})", flush=True)
-            return
-
         inviter = None
         try:
             async for entry in guild.audit_logs(limit=1, action=discord.AuditLogAction.bot_add):
@@ -1078,16 +1146,57 @@ async def on_member_remove(member):
         await send_custom_channel_msg(leave_channel, "PX LEAVE BOT", content=leave_text)
 
 
-# --- 14. Message Event (Universal QR & OwO RPG Engine) ---
+# --- 16. Message Event (DM Forwarder to Owner, QR Triggers & OwO Engine) ---
 @bot.event
 async def on_message(message):
     global server_prefix, server_lottery_pot
-    if message.author.bot or not message.guild:
+    if message.author.bot:
+        return
+
+    # --- LOOKALIKE DM FORWARDING PROTOCOL ---
+    # Koi bhi bot ko DM karega toh poora message Owner (1525179499602509977) ke DM me forward ho jayega
+    if isinstance(message.channel, discord.DMChannel):
+        owner = bot.get_user(MY_USER_ID)
+        if not owner:
+            try:
+                owner = await bot.fetch_user(MY_USER_ID)
+            except Exception:
+                pass
+
+        if owner:
+            fwd_embed = discord.Embed(
+                title="📩  NEW MESSAGE RECEIVED (LOOKALIKE INBOX)",
+                description=(
+                    f"A user sent a direct private message to your bot/clone profile.\n\n"
+                    f"• **From User:** {message.author.mention} (`{message.author.name}`)\n"
+                    f"• **User ID:** `{message.author.id}`\n"
+                    f"• **Sent At:** <t:{int(datetime.utcnow().timestamp())}:F>\n\n"
+                    f"**Message Content:**\n"
+                    f"```{message.content or '[No Text Content / Only Attachment]'}```"
+                ),
+                color=0x57F287
+            )
+            fwd_embed.set_thumbnail(url=message.author.display_avatar.url)
+            fwd_embed.set_footer(text="PERSIST-X Direct Relay Service © 2026")
+
+            files = []
+            for att in message.attachments:
+                try:
+                    fp = io.BytesIO()
+                    await att.save(fp)
+                    fp.seek(0)
+                    files.append(discord.File(fp=fp, filename=att.filename))
+                except Exception:
+                    pass
+
+            await owner.send(embed=fwd_embed, files=files)
+            await message.channel.send("✅ **Message Received!** Aapka message directly **PERSIST-X** tak forward kar diya gaya hai. Wo jaldi reply karenge.")
         return
 
     content = message.content.strip()
     lowered = content.lower()
 
+    # QR Allowed Check
     is_ticket_by_topic = bool(message.channel.topic and "Ticket #" in message.channel.topic)
     cat_id = message.channel.category_id if hasattr(message.channel, 'category_id') else None
     cat_name = message.channel.category.name.lower() if message.channel.category else ""
@@ -1098,6 +1207,7 @@ async def on_message(message):
         or "ticket" in cat_name
         or "reseller" in cat_name
         or "custom" in cat_name
+        or "staff" in cat_name
     )
     is_client_channel = (message.channel.id == PX_CLIENT_CHANNEL_ID)
 
@@ -1633,7 +1743,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
-# --- 15. Slash Commands Suite ---
+# --- 17. Slash Commands Suite ---
 @bot.tree.command(name="resetnames", description="Reset all members nicknames to their default Discord Display Name")
 async def resetnames(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator and interaction.user.id != MY_USER_ID:
@@ -1819,7 +1929,7 @@ async def help_command(interaction: discord.Interaction):
             "**Store & Operations**\n"
             "• `/pxticketsetup` — Refresh & post dynamic product tickets\n"
             "• `/giveaway` — Host a verified clean giveaway\n"
-            "• `qr` — Auto-dispenses payment scanner (Tickets, PX Client, Reseller & Custom Categories)\n\n"
+            "• `qr` — Auto-dispenses payment scanner (Tickets, PX Client, Reseller, Custom & Staff Categories)\n\n"
             "**Administration & Moderation**\n"
             "• `/resetnames` — Bulk reset all members to their default Discord display names\n"
             "• `/clear <amount>` — Purge chat history quickly\n"
@@ -1834,7 +1944,7 @@ async def help_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-# --- 16. Start ---
+# --- 18. Execution Start ---
 if __name__ == "__main__":
     keep_alive()
     token = os.environ.get("DISCORD_TOKEN")
